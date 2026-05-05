@@ -41,6 +41,7 @@ export default function BookPage() {
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
 
   const [availability, setAvailability] = useState<Record<string, DateStatus>>({});
   const [slots, setSlots] = useState<TimeSlotData[]>([]);
@@ -56,7 +57,7 @@ export default function BookPage() {
       const res = await fetch("/api/availability");
       if (res.ok) {
         const data = await res.json();
-        setAvailability(data.availability || {});
+        setAvailability(data.data?.availability || {});
       }
     } catch {
       console.error("Failed to fetch availability");
@@ -65,6 +66,20 @@ export default function BookPage() {
 
   useEffect(() => {
     fetchAvailability();
+    
+    // Fetch settings for session types
+    async function fetchSettings() {
+      try {
+        const res = await fetch("/api/settings");
+        if (res.ok) {
+          const data = await res.json();
+          setSettings(data.data.settings);
+        }
+      } catch (err) {
+        console.error("Failed to fetch settings:", err);
+      }
+    }
+    fetchSettings();
   }, [fetchAvailability]);
 
   // Fetch time slots for selected date
@@ -78,7 +93,7 @@ export default function BookPage() {
         const res = await fetch(`/api/timeslots?date=${dateStr}`);
         if (res.ok) {
           const data = await res.json();
-          setSlots(data.slots || []);
+          setSlots(data.data?.slots || []);
         }
       } catch {
         console.error("Failed to fetch slots");
@@ -135,7 +150,7 @@ export default function BookPage() {
       
       // Redirect after short delay
       setTimeout(() => {
-        router.push(`/book/confirmation?id=${data.booking.id}`);
+        router.push(`/book/confirmation?id=${data.data?.booking?.id || data.booking?.id}`);
       }, 2000);
     } catch {
       setError("Something went wrong. Please try again.");
@@ -223,18 +238,18 @@ export default function BookPage() {
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-1.5 text-black">What do you wish to do?</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {Object.entries(SESSION_TYPE_LABELS).map(([value, label]) => (
+                      {(settings?.sessionTypes || []).map((type: any) => (
                         <button
-                          key={value}
+                          key={type.id}
                           type="button"
-                          onClick={() => setSessionType(value)}
+                          onClick={() => setSessionType(type.label)}
                           className={cn(
                             "flex items-center gap-3 p-4 rounded-xl border text-left transition-all",
-                            sessionType === value ? "bg-accent/10 border-accent text-accent" : "bg-card border-border text-muted hover:border-accent/50"
+                            sessionType === type.label ? "bg-accent/10 border-accent text-accent" : "bg-card border-border text-muted hover:border-accent/50"
                           )}
                         >
-                          <Music className={cn("w-5 h-5", sessionType === value ? "text-accent" : "text-muted")} />
-                          <span className="text-sm font-medium">{label}</span>
+                          <span className="text-xl">{type.icon}</span>
+                          <span className="text-sm font-medium">{type.label}</span>
                         </button>
                       ))}
                     </div>
@@ -342,7 +357,7 @@ export default function BookPage() {
                     <Music className="w-5 h-5 text-accent" />
                     <div>
                       <p className="text-xs text-muted font-medium uppercase tracking-wider">Session Type</p>
-                      <p className="text-sm font-medium text-primary mt-0.5">{SESSION_TYPE_LABELS[sessionType as SessionType]}</p>
+                      <p className="text-sm font-medium text-primary mt-0.5">{sessionType}</p>
                     </div>
                   </div>
                 )}

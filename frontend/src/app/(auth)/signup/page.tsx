@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signup } from "@/lib/auth";
-import { Mail, Lock, Loader2, AlertCircle, ArrowLeft, User, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, Loader2, AlertCircle, ArrowLeft, User, CheckCircle2, Eye, EyeOff, Check, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -12,12 +12,36 @@ function SignupForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  
+  const passwordCriteria = {
+    length: password.length >= 6,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /[0-9]/.test(password),
+    special: /[^A-Za-z0-9]/.test(password),
+  };
+
+  const isPasswordValid = Object.values(passwordCriteria).every(Boolean);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    
+    if (!isEmailValid) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
+    if (!isPasswordValid) {
+      setError("Password does not meet all requirements");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -46,7 +70,7 @@ function SignupForm() {
         </div>
         <h2 className="text-xl font-bold text-white mb-2">Account Created!</h2>
         <p className="text-white/60 text-sm mb-8 leading-relaxed">
-          We've sent a 6-digit verification code to your email. Please verify your email to activate your account.
+          We've sent a verification link to your email. Click the link in the email to activate your account.
         </p>
         <Link 
           href={`/verify-email?email=${encodeURIComponent(email)}`} 
@@ -100,8 +124,17 @@ function SignupForm() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/50 transition-all"
+              className={`w-full pl-10 pr-10 py-3 rounded-xl bg-white/5 border ${email && !isEmailValid ? 'border-error/50' : 'border-white/10'} text-white text-sm placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/50 transition-all`}
             />
+            {email && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {isEmailValid ? (
+                  <Check className="w-4 h-4 text-available" />
+                ) : (
+                  <X className="w-4 h-4 text-error" />
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -113,20 +146,33 @@ function SignupForm() {
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
             <input
               id="password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              minLength={6}
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/50 transition-all"
+              className={`w-full pl-10 pr-12 py-3 rounded-xl bg-white/5 border ${password && !isPasswordValid ? 'border-error/50' : 'border-white/10'} text-white text-sm placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/50 transition-all`}
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-white/30 hover:text-white/60 transition-colors"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
           </div>
+
+          {password && !isPasswordValid && (
+            <div className="mt-2 text-error text-[10px] flex items-center gap-1.5 animate-fade-in">
+              <AlertCircle className="w-3 h-3" />
+              Use a strong password (A, a, 4, $ and 6+ chars)
+            </div>
+          )}
         </div>
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !isEmailValid || !isPasswordValid || !name}
           className="w-full py-3.5 rounded-xl text-white font-semibold gradient-accent shadow-lg shadow-accent/25 hover:shadow-xl hover:shadow-accent/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (

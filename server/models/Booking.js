@@ -31,6 +31,9 @@ const bookingSchema = new mongoose.Schema(
     notes: {
       type: String,
     },
+    cancellationReason: {
+      type: String,
+    },
     // We keep timeSlotId if the frontend sends it, but the plan says timeSlot (String)
     // To stay compatible with existing frontend which sends timeSlotId:
     timeSlotId: {

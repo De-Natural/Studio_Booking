@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const env = require('../config/env');
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
@@ -74,32 +75,35 @@ const signup = asyncHandler(async (req, res) => {
     }
     
     // User exists but is NOT verified - allow them to "re-register"
-    console.log('DEBUG: User exists but unverified. Updating and resending code.');
-    
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log('DEBUG: User exists but unverified. Updating and resending verification link.');
+
+    const verificationToken = crypto.randomBytes(32).toString('hex');
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const verificationLink = `${env.FRONTEND_URL}/verify-email?email=${encodeURIComponent(existingUser.email)}&token=${verificationToken}`;
 
     existingUser.name = name;
     existingUser.passwordHash = password; // Will be hashed by pre-save
-    existingUser.verificationCode = verificationCode;
+    existingUser.verificationCode = verificationToken;
     existingUser.verificationExpires = verificationExpires;
     await existingUser.save();
 
     try {
       const { sendVerificationEmail } = require('../utils/mailer');
-      await sendVerificationEmail(existingUser.email, verificationCode);
+      await sendVerificationEmail(existingUser.email, verificationLink);
+      console.log('Verification email resent to:', existingUser.email);
     } catch (err) {
-      console.error('Failed to resend verification email:', err);
+      console.error('Failed to resend verification email:', err.message);
     }
 
-    return sendResponse(res, 201, 'Account already exists but was unverified. A new code has been sent.', {
+    return sendResponse(res, 201, 'Account already exists but was unverified. A new verification link has been sent.', {
       user: { id: existingUser._id, email: existingUser.email, name: existingUser.name }
     });
   }
 
-  // Generate verification code (6 digits)
-  const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+  // Generate secure verification token
+  const verificationToken = crypto.randomBytes(32).toString('hex');
   const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const verificationLink = `${env.FRONTEND_URL}/verify-email?email=${encodeURIComponent(email)}&token=${verificationToken}`;
 
   // Create user
   const user = await User.create({
@@ -108,19 +112,19 @@ const signup = asyncHandler(async (req, res) => {
     passwordHash: password,
     role: 'USER',
     emailVerified: false,
-    verificationCode,
+    verificationCode: verificationToken,
     verificationExpires,
   });
 
-  // Send verification email
   try {
     const { sendVerificationEmail } = require('../utils/mailer');
-    await sendVerificationEmail(user.email, verificationCode);
+    await sendVerificationEmail(user.email, verificationLink);
+    console.log('Verification email sent to:', user.email);
   } catch (err) {
-    console.error('Failed to send verification email:', err);
+    console.error('Failed to send verification email:', err.message);
   }
 
-  return sendResponse(res, 201, 'Account created successfully. Please check your email for verification code.', {
+  return sendResponse(res, 201, 'Account created successfully. Please check your email to verify your account.', {
     user: {
       id: user._id,
       email: user.email,
@@ -133,20 +137,20 @@ const signup = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/verify-email
 // @access  Public
 const verifyEmail = asyncHandler(async (req, res) => {
-  const { email, code } = req.body;
+  const { email, token } = req.body;
 
-  if (!email || !code) {
-    return sendError(res, 400, 'Email and code are required');
+  if (!email || !token) {
+    return sendError(res, 400, 'Email and token are required');
   }
 
   const user = await User.findOne({
     email,
-    verificationCode: code,
+    verificationCode: token,
     verificationExpires: { $gt: Date.now() },
   });
 
   if (!user) {
-    return sendError(res, 400, 'Invalid or expired verification code');
+    return sendError(res, 400, 'Invalid or expired verification link. Please request a new one.');
   }
 
   user.emailVerified = true;
@@ -195,24 +199,25 @@ const resendCode = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'This account is already verified. Please login.');
   }
 
-  // Generate new verification code (6 digits)
-  const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+  // Generate new secure verification token
+  const verificationToken = crypto.randomBytes(32).toString('hex');
   const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const verificationLink = `${env.FRONTEND_URL}/verify-email?email=${encodeURIComponent(user.email)}&token=${verificationToken}`;
 
-  user.verificationCode = verificationCode;
+  user.verificationCode = verificationToken;
   user.verificationExpires = verificationExpires;
   await user.save();
 
-  // Send verification email
   try {
     const { sendVerificationEmail } = require('../utils/mailer');
-    await sendVerificationEmail(user.email, verificationCode);
+    await sendVerificationEmail(user.email, verificationLink);
+    console.log('Verification email resent to:', user.email);
   } catch (err) {
-    console.error('Failed to resend verification email:', err);
+    console.error('Failed to resend verification email:', err.message);
     return sendError(res, 500, 'Failed to send email. Please try again later.');
   }
 
-  return sendResponse(res, 200, 'A new verification code has been sent to your email.');
+  return sendResponse(res, 200, 'A new verification link has been sent to your email.');
 });
 
 module.exports = { login, signup, verifyEmail, verifyToken, resendCode };

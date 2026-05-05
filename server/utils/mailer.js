@@ -1,16 +1,8 @@
 const nodemailer = require('nodemailer');
-const { Resend } = require('resend');
-const { BrevoClient } = require('@getbrevo/brevo');
 const env = require('../config/env');
 const logger = require('./logger');
 
-// Initialize Brevo Client
-const brevoClient = env.BREVO_API_KEY ? new BrevoClient({ apiKey: env.BREVO_API_KEY }) : null;
-
-// Initialize Resend if key is available
-const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
-
-// Fallback SMTP Transporter
+// SMTP transporter using Gmail credentials from .env
 const transporter = nodemailer.createTransport({
   host: env.EMAIL_HOST,
   port: env.EMAIL_PORT,
@@ -22,59 +14,29 @@ const transporter = nodemailer.createTransport({
 });
 
 const sendEmail = async (options) => {
+  const mailOptions = {
+    from: `"${env.EMAIL_FROM_NAME}" <${env.EMAIL_USER}>`,
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+  };
+
   try {
-    // 1. Try Brevo first (User's preferred choice)
-    if (brevoClient) {
-      const data = await brevoClient.transactionalEmails.sendTransacEmail({
-        subject: options.subject,
-        htmlContent: options.html,
-        sender: { email: env.EMAIL_FROM, name: env.EMAIL_FROM_NAME },
-        to: [{ email: options.to }],
-      });
-      logger.info(`Email sent via Brevo: ${data.messageId || 'success'}`);
-      return data;
-    }
-
-    // 2. Try Resend second
-    if (resend) {
-      const { data, error } = await resend.emails.send({
-        from: `${env.EMAIL_FROM_NAME} <${env.EMAIL_FROM}>`,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-      });
-
-      if (!error) {
-        logger.info(`Email sent via Resend: ${data.id}`);
-        return data;
-      }
-      logger.error(`Resend error: ${error.message}`);
-    }
-
-    // 3. Fallback to SMTP
-    const info = await transporter.sendMail({
-      from: `"${env.EMAIL_FROM_NAME}" <${env.EMAIL_FROM}>`,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-    });
-
-    logger.info(`Email sent via SMTP: ${info.messageId}`);
+    const info = await transporter.sendMail(mailOptions);
+    logger.info(`Email sent to ${options.to} — MessageId: ${info.messageId}`);
     return info;
   } catch (error) {
-    logger.error(`Email delivery failed: ${error.message}`);
-    if (env.NODE_ENV === 'production') {
-      throw error;
-    }
+    logger.error(`Email delivery failed to ${options.to}: ${error.message}`);
+    throw error; // Always rethrow so callers know it failed
   }
 };
 
 const sendUserConfirmation = async (booking) => {
-  const dateStr = new Date(booking.date).toLocaleDateString('en-GB', { 
-    weekday: 'long', 
-    day: 'numeric', 
-    month: 'long', 
-    year: 'numeric' 
+  const dateStr = new Date(booking.date).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
   });
 
   const html = `
@@ -93,8 +55,8 @@ const sendUserConfirmation = async (booking) => {
         </div>
       </div>
 
-      <div style="text-align: center; color: #9ca3af; font-size: 12px; border-top: 1px solid #e2e8f0; pt: 20px;">
-        <p style="margin-top: 20px;">If you need to cancel or reschedule, please contact us at least 24 hours in advance.</p>
+      <div style="text-align: center; color: #9ca3af; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
+        <p>If you need to cancel or reschedule, please contact us at least 24 hours in advance.</p>
         <p>Lagos, Nigeria • +234 801 234 5678</p>
         <p style="color: #9ca3af; font-size: 11px; margin-top: 20px;">&copy; ${new Date().getFullYear()} LuxeLoft Studio</p>
       </div>
@@ -109,11 +71,11 @@ const sendUserConfirmation = async (booking) => {
 };
 
 const sendAdminNotification = async (booking) => {
-  const dateStr = new Date(booking.date).toLocaleDateString('en-GB', { 
-    weekday: 'long', 
-    day: 'numeric', 
-    month: 'long', 
-    year: 'numeric' 
+  const dateStr = new Date(booking.date).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
   });
 
   const html = `
@@ -155,17 +117,22 @@ const sendAdminNotification = async (booking) => {
   });
 };
 
-const sendVerificationEmail = async (email, code) => {
+const sendVerificationEmail = async (email, verificationLink) => {
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #0a0a0a; color: #ffffff;">
       <h1 style="color: #ffffff; text-align: center; font-size: 24px; margin-top: 30px;">Verify your email</h1>
-      <p style="color: #a3a3a3; font-size: 16px; text-align: center;">Welcome to LuxeLoft Studio. Please use the verification code below to complete your registration:</p>
+      <p style="color: #a3a3a3; font-size: 16px; text-align: center;">Welcome to LuxeLoft Studio. Click the button below to verify your email and activate your account.</p>
       
-      <div style="background: #1a1a2e; padding: 30px; text-align: center; border-radius: 12px; margin: 30px 0; border: 1px solid #f43f5e33;">
-        <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #f43f5e;">${code}</span>
+      <div style="text-align: center; margin: 36px 0;">
+        <a href="${verificationLink}" style="display: inline-block; background: #f43f5e; color: #ffffff; font-size: 16px; font-weight: bold; text-decoration: none; padding: 16px 40px; border-radius: 10px; letter-spacing: 0.5px;">
+          Verify My Email
+        </a>
       </div>
+
+      <p style="color: #525252; font-size: 13px; text-align: center;">Or copy and paste this link into your browser:</p>
+      <p style="background: #1a1a1a; color: #a3a3a3; font-size: 12px; text-align: center; padding: 12px 16px; border-radius: 8px; word-break: break-all; border: 1px solid #262626;">${verificationLink}</p>
       
-      <p style="color: #525252; font-size: 14px; text-align: center;">This code will expire in 24 hours. If you didn't create an account, please ignore this email.</p>
+      <p style="color: #525252; font-size: 13px; text-align: center; margin-top: 24px;">This link will expire in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
       
       <div style="margin-top: 40px; border-top: 1px solid #262626; padding-top: 20px; text-align: center;">
         <p style="color: #525252; font-size: 12px;">&copy; ${new Date().getFullYear()} LuxeLoft Studio. All rights reserved.</p>
