@@ -10,7 +10,27 @@ import { Music, Calendar, Clock, User, ArrowRight, Loader2 } from "lucide-react"
 export default function UserDashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<{ email: string; name: string; role: string } | null>(null);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+
+  const fetchMyBookings = async () => {
+    try {
+      const res = await fetch("/api/bookings/my-bookings", {
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBookings(data.data?.bookings || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch bookings:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -30,8 +50,41 @@ export default function UserDashboardPage() {
     }
 
     setUser(currentUser);
-    setLoading(false);
+    fetchMyBookings();
   }, [router]);
+
+  const handleCancelBooking = async (id: string) => {
+    if (!cancelReason || cancelReason.length < 5) {
+      alert("Please provide a valid reason (min 5 characters)");
+      return;
+    }
+
+    setIsSubmittingCancel(true);
+    try {
+      const res = await fetch(`/api/bookings/${id}/cancel`, {
+        method: "PATCH",
+        headers: {
+          ...authHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason: cancelReason }),
+      });
+
+      if (res.ok) {
+        setCancellingId(null);
+        setCancelReason("");
+        await fetchMyBookings();
+      } else {
+        const data = await res.json();
+        alert(data.message || "Failed to cancel booking");
+      }
+    } catch (err) {
+      console.error("Cancellation error:", err);
+      alert("Something went wrong");
+    } finally {
+      setIsSubmittingCancel(false);
+    }
+  };
 
   if (loading || !user) {
     return (
@@ -49,17 +102,17 @@ export default function UserDashboardPage() {
           <div className="w-10 h-10 rounded-xl gradient-accent flex items-center justify-center">
             <Music className="w-6 h-6 text-white" />
           </div>
-          <span className="text-xl font-bold font-[family-name:var(--font-heading)]">LuxeLoft</span>
+          <span className="text-xl font-bold font-[family-name:var(--font-heading)] text-white">LuxeLoft</span>
         </Link>
 
         <div className="space-y-2">
           <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/10 text-white transition-all">
-            <User className="w-5 h-5" />
-            <span className="font-medium">My Profile</span>
+            <User className="w-5 h-5 text-white" />
+            <span className="font-medium text-white">My Profile</span>
           </Link>
           <Link href="/book" className="flex items-center gap-3 px-4 py-3 rounded-xl text-white/60 hover:bg-white/5 hover:text-white transition-all">
-            <Calendar className="w-5 h-5" />
-            <span className="font-medium">Book Session</span>
+            <Calendar className="w-5 h-5 text-white/60" />
+            <span className="font-medium text-white/60">Book Session</span>
           </Link>
         </div>
 
@@ -102,9 +155,81 @@ export default function UserDashboardPage() {
                 Recent Activity
               </h3>
               <div className="space-y-4">
-                <div className="text-center py-8 border-2 border-dashed border-border rounded-xl">
-                  <p className="text-sm text-muted">No recent bookings found.</p>
-                </div>
+                {bookings.length === 0 ? (
+                  <div className="text-center py-8 border-2 border-dashed border-border rounded-xl">
+                    <p className="text-sm text-muted">No recent bookings found.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {bookings.slice(0, 5).map((booking) => (
+                      <div key={booking._id} className="p-4 rounded-xl bg-surface-alt border border-border transition-all">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
+                              <Calendar className="w-4 h-4 text-accent" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-primary">
+                                {new Date(booking.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </p>
+                              <p className="text-xs text-muted">{booking.timeSlot}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${
+                              booking.status === 'confirmed' ? 'bg-available/10 text-available' : 'bg-booked/10 text-booked'
+                            }`}>
+                              {booking.status}
+                            </span>
+                            {booking.status === 'confirmed' && cancellingId !== booking._id && (
+                              <button 
+                                onClick={() => setCancellingId(booking._id)}
+                                className="text-[10px] font-bold text-booked hover:underline"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {cancellingId === booking._id && (
+                          <div className="mt-3 pt-3 border-t border-border animate-fade-in">
+                            <label className="block text-xs font-medium text-primary mb-2">Reason for cancellation</label>
+                            <textarea
+                              value={cancelReason}
+                              onChange={(e) => setCancelReason(e.target.value)}
+                              placeholder="Why are you cancelling?"
+                              className="w-full p-3 rounded-xl bg-white border border-border text-sm focus:outline-none focus:ring-2 focus:ring-booked/30 min-h-[80px]"
+                            />
+                            <div className="flex justify-end gap-2 mt-3">
+                              <button
+                                onClick={() => {
+                                  setCancellingId(null);
+                                  setCancelReason("");
+                                }}
+                                className="px-4 py-2 text-xs font-medium text-muted hover:text-primary transition-colors"
+                              >
+                                Back
+                              </button>
+                              <button
+                                onClick={() => handleCancelBooking(booking._id)}
+                                disabled={isSubmittingCancel || cancelReason.length < 5}
+                                className="px-4 py-2 text-xs font-bold text-white bg-booked rounded-lg shadow-sm hover:scale-105 disabled:opacity-50 disabled:hover:scale-100 transition-all flex items-center gap-2"
+                              >
+                                {isSubmittingCancel ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    Cancelling...
+                                  </>
+                                ) : "Confirm Cancellation"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

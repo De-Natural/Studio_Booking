@@ -4,12 +4,20 @@ const asyncHandler = require('../utils/asyncHandler');
 const { sendResponse, sendError } = require('../utils/response');
 const { sendUserConfirmation, sendAdminNotification } = require('../utils/mailer');
 
-// Hardcoded Time Slots (since we moved away from DB-based slots as per plan)
-const TIME_SLOTS = [
-  { id: 'ts1', label: 'Morning (9:00 AM - 1:00 PM)', startTime: '09:00', endTime: '13:00' },
-  { id: 'ts2', label: 'Afternoon (2:00 PM - 6:00 PM)', startTime: '14:00', endTime: '18:00' },
-  { id: 'ts3', label: 'Evening (7:00 PM - 11:00 PM)', startTime: '19:00', endTime: '23:00' },
-];
+const StudioSettings = require('../models/StudioSettings');
+
+// Helper to get time slots from DB or defaults
+async function getTimeSlots() {
+  const settings = await StudioSettings.findOne();
+  if (settings && settings.timeSlots && settings.timeSlots.length > 0) {
+    return settings.timeSlots;
+  }
+  return [
+    { id: 'ts1', label: 'Morning (9:00 AM - 1:00 PM)', startTime: '09:00', endTime: '13:00' },
+    { id: 'ts2', label: 'Afternoon (2:00 PM - 6:00 PM)', startTime: '14:00', endTime: '18:00' },
+    { id: 'ts3', label: 'Evening (7:00 PM - 11:00 PM)', startTime: '19:00', endTime: '23:00' },
+  ];
+}
 
 // @desc    Create new booking
 // @route   POST /api/bookings
@@ -38,12 +46,14 @@ const createBooking = asyncHandler(async (req, res) => {
   // Compatibility: If timeSlotId is provided but not label, find label
   let slotLabel = timeSlot;
   let slotId = timeSlotId;
+  const dbSlots = await getTimeSlots();
+
   if (slotId && !slotLabel) {
-    const slot = TIME_SLOTS.find(s => s.id === slotId);
+    const slot = dbSlots.find(s => s.id === slotId);
     if (slot) slotLabel = slot.label;
   }
   if (!slotId && slotLabel) {
-    const slot = TIME_SLOTS.find(s => s.label === slotLabel);
+    const slot = dbSlots.find(s => s.label === slotLabel);
     if (slot) slotId = slot.id;
   }
 
@@ -122,7 +132,8 @@ const getAvailability = asyncHandler(async (req, res) => {
   });
 
   const availability = {};
-  const totalSlotsCount = TIME_SLOTS.length;
+  const dbSlots = await getTimeSlots();
+  const totalSlotsCount = dbSlots.length;
 
   // Count bookings per date
   const bookingsPerDate = {};
@@ -163,7 +174,8 @@ const getTimeslots = asyncHandler(async (req, res) => {
   const bookings = await Booking.find({ date: bookingDate, status: 'confirmed' });
   const bookedSlotIds = new Set(bookings.map(b => b.timeSlotId || b.timeSlot));
 
-  const slots = TIME_SLOTS.map(slot => ({
+  const dbSlots = await getTimeSlots();
+  const slots = dbSlots.map(slot => ({
     ...slot,
     isBooked: bookedSlotIds.has(slot.id) || bookedSlotIds.has(slot.label)
   }));
@@ -184,9 +196,49 @@ const getBookingById = asyncHandler(async (req, res) => {
   return sendResponse(res, 200, 'Booking fetched', { booking });
 });
 
+// @desc    Get bookings for the logged-in user
+// @route   GET /api/bookings/my-bookings
+// @access  Private
+const getUserBookings = asyncHandler(async (req, res) => {
+  const email = req.user.email;
+  
+  const bookings = await Booking.find({ email }).sort({ date: -1 });
+
+  return sendResponse(res, 200, 'User bookings fetched', { bookings });
+});
+
+// @desc    Cancel a booking (by user)
+// @route   PATCH /api/bookings/:id/cancel
+// @access  Private
+const cancelBooking = asyncHandler(async (req, res) => {
+  const { reason } = req.body;
+  const booking = await Booking.findById(req.params.id);
+
+  if (!booking) {
+    return sendError(res, 404, 'Booking not found');
+  }
+
+  // Ensure user can only cancel their own booking
+  if (booking.email !== req.user.email) {
+    return sendError(res, 403, 'Not authorized to cancel this booking');
+  }
+
+  if (booking.status === 'cancelled') {
+    return sendError(res, 400, 'Booking is already cancelled');
+  }
+
+  booking.status = 'cancelled';
+  booking.cancellationReason = reason || 'No reason provided';
+  await booking.save();
+
+  return sendResponse(res, 200, 'Booking cancelled successfully', { booking });
+});
+
 module.exports = {
   createBooking,
   getAvailability,
   getTimeslots,
   getBookingById,
+  getUserBookings,
+  cancelBooking,
 };

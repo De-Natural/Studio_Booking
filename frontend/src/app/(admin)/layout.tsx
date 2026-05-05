@@ -29,7 +29,7 @@ function AdminSidebar() {
     <aside
       className={`${
         collapsed ? "w-[72px]" : "w-64"
-      } bg-primary min-h-screen flex flex-col transition-all duration-300 ease-in-out`}
+      } bg-primary h-screen sticky top-0 flex flex-col transition-all duration-300 ease-in-out shrink-0`}
     >
       {/* Logo */}
       <div className="h-16 flex items-center gap-2.5 px-4 border-b border-white/10">
@@ -44,7 +44,7 @@ function AdminSidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-4 px-2 space-y-1">
+      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto custom-scrollbar">
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -101,8 +101,8 @@ export default function AdminLayout({
   return (
     <div className="flex min-h-screen bg-surface">
       <AdminSidebar />
-      <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
-        <main className="flex-1 p-6 lg:p-8">{children}</main>
+      <div className="flex-1 flex flex-col min-h-screen max-w-full overflow-hidden">
+        <main className="flex-1 p-6 lg:p-8 overflow-y-auto">{children}</main>
       </div>
     </div>
   );
