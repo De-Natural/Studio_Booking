@@ -17,6 +17,8 @@ const env = {
   ADMIN_NOTIFY_EMAIL: process.env.ADMIN_NOTIFY_EMAIL,
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   BACKEND_URL: process.env.BACKEND_URL || 'http://localhost:5000',
+  PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY,
+  PAYSTACK_PUBLIC_KEY: process.env.PAYSTACK_PUBLIC_KEY,
 };
 
 module.exports = env;

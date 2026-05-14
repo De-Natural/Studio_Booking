@@ -3,14 +3,18 @@ const BlockedDate = require('../models/BlockedDate');
 const asyncHandler = require('../utils/asyncHandler');
 const { sendResponse, sendError } = require('../utils/response');
 const { sendUserConfirmation, sendAdminNotification } = require('../utils/mailer');
+const logger = require('../utils/logger');
 
 const StudioSettings = require('../models/StudioSettings');
 
 // Helper to get time slots from DB or defaults
 async function getTimeSlots() {
-  const settings = await StudioSettings.findOne();
+  // Use .lean() to get plain JS objects — avoids Mongoose's `id` virtual
+  // shadowing the stored `id` field (e.g., 'ts1') with _id.toString()
+  const settings = await StudioSettings.findOne().lean();
   if (settings && settings.timeSlots && settings.timeSlots.length > 0) {
-    return settings.timeSlots;
+    // Strip Mongoose _id from subdocuments, keep our custom id
+    return settings.timeSlots.map(({ _id, ...rest }) => rest);
   }
   return [
     { id: 'ts1', label: 'Morning (9:00 AM - 1:00 PM)', startTime: '09:00', endTime: '13:00' },
@@ -83,7 +87,7 @@ const createBooking = asyncHandler(async (req, res) => {
     return sendError(res, 409, 'This time slot is already booked');
   }
 
-  // 4. Create booking
+  // 4. Create booking (pending until payment is made)
   const booking = await Booking.create({
     name: finalName,
     email: finalEmail,
@@ -93,14 +97,13 @@ const createBooking = asyncHandler(async (req, res) => {
     timeSlotId: slotId,
     sessionType: sessionType,
     notes,
-    status: 'confirmed', // Assuming instant confirmation for now
+    status: 'pending',
+    paymentStatus: 'unpaid',
   });
 
-  // 5. Emails
-  sendUserConfirmation(booking).catch(err => console.error('Email Error:', err));
-  sendAdminNotification(booking).catch(err => console.error('Email Error:', err));
+  // Note: Emails are sent AFTER payment is verified (see payment.controller.js)
 
-  return sendResponse(res, 201, 'Booking created successfully', {
+  return sendResponse(res, 201, 'Booking created successfully. Please complete payment.', {
     booking: {
       id: booking._id,
       name: booking.name,
@@ -108,6 +111,7 @@ const createBooking = asyncHandler(async (req, res) => {
       date: booking.date,
       timeSlot: booking.timeSlot,
       status: booking.status,
+      paymentStatus: booking.paymentStatus,
     }
   });
 });
@@ -176,7 +180,10 @@ const getTimeslots = asyncHandler(async (req, res) => {
 
   const dbSlots = await getTimeSlots();
   const slots = dbSlots.map(slot => ({
-    ...slot,
+    id: slot.id,
+    label: slot.label,
+    startTime: slot.startTime,
+    endTime: slot.endTime,
     isBooked: bookedSlotIds.has(slot.id) || bookedSlotIds.has(slot.label)
   }));
 
@@ -227,11 +234,28 @@ const cancelBooking = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'Booking is already cancelled');
   }
 
+  // Auto-refund if payment was made
+  let refundResult = null;
+  if (booking.paymentStatus === 'paid' && booking.paymentReference) {
+    const { refundPayment } = require('./payment.controller');
+    refundResult = await refundPayment(booking);
+    if (refundResult.success) {
+      booking.paymentStatus = 'refunded';
+      logger.info(`Refund processed for cancelled booking ${booking._id}`);
+    } else {
+      logger.error(`Refund failed for booking ${booking._id}: ${refundResult.message}`);
+      // Still cancel the booking but note the refund failure
+    }
+  }
+
   booking.status = 'cancelled';
   booking.cancellationReason = reason || 'No reason provided';
   await booking.save();
 
-  return sendResponse(res, 200, 'Booking cancelled successfully', { booking });
+  return sendResponse(res, 200, 'Booking cancelled successfully', {
+    booking,
+    refund: refundResult ? { success: refundResult.success, message: refundResult.message } : null,
+  });
 });
 
 module.exports = {

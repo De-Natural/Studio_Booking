@@ -39,6 +39,22 @@ const bookingSchema = new mongoose.Schema(
     timeSlotId: {
       type: String,
     },
+    // Payment fields (Paystack)
+    paymentReference: {
+      type: String,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['unpaid', 'pending', 'paid', 'failed', 'refunded'],
+      default: 'unpaid',
+    },
+    amountPaid: {
+      type: Number,
+      default: 0,
+    },
+    paidAt: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );

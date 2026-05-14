@@ -47,18 +47,18 @@ function LoginForm() {
   return (
     <div className="glass-dark rounded-2xl p-8 shadow-xl">
       {error && (
-        <div className="mb-5 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm flex items-center gap-2">
+        <div className="mb-5 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-red-600 text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
       )}
 
       {verified && (
-        <div className="mb-5 p-3 rounded-lg bg-accent/10 border border-accent/20 text-accent text-sm flex items-center gap-2">
+        <div className="mb-5 p-3 rounded-lg bg-accent/10 border border-accent/20 text-green-700 text-sm flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           Email verified! You can now sign in.
         </div>
-      )}
+      )} 
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
