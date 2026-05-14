@@ -25,6 +25,7 @@ const authRoutes = require('./routes/auth.routes');
 const bookingRoutes = require('./routes/booking.routes');
 const adminRoutes = require('./routes/admin.routes');
 const settingsRoutes = require('./routes/settings.routes');
+const paymentRoutes = require('./routes/payment.routes');
 const { getAvailability, getTimeslots } = require('./controllers/booking.controller');
 
 // Mount Routes
@@ -32,6 +33,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Special endpoints to match exact URL contracts
 app.get('/api/availability', getAvailability);

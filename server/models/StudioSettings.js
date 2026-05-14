@@ -15,6 +15,7 @@ const studioSettingsSchema = new mongoose.Schema(
         id: String,
         label: String,
         icon: String,
+        price: { type: Number, default: 0 },
       }
     ],
     timeSlots: [
