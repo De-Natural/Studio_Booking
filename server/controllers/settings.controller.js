@@ -20,13 +20,22 @@ const DEFAULT_TIME_SLOTS = [
 // @route   GET /api/settings
 // @access  Public
 const getSettings = asyncHandler(async (req, res) => {
-  let settings = await StudioSettings.findOne();
+  let settings = await StudioSettings.findOne().lean();
 
   if (!settings) {
-    settings = await StudioSettings.create({
+    const created = await StudioSettings.create({
       sessionTypes: DEFAULT_SESSION_TYPES,
       timeSlots: DEFAULT_TIME_SLOTS,
     });
+    settings = created.toObject();
+  }
+
+  // Clean up Mongoose _id from subdocuments so our custom `id` fields are used
+  if (settings.sessionTypes) {
+    settings.sessionTypes = settings.sessionTypes.map(({ _id, ...rest }) => rest);
+  }
+  if (settings.timeSlots) {
+    settings.timeSlots = settings.timeSlots.map(({ _id, ...rest }) => rest);
   }
 
   return sendResponse(res, 200, 'Settings fetched', { settings });

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import BookingCalendar, { DateStatus } from "@/components/booking/Calendar";
 import TimeSlotPicker, { TimeSlotData } from "@/components/booking/TimeSlotPicker";
+import PaystackButton from "@/components/booking/PaystackButton";
 import { formatDate, formatDateLocal, formatDateForAPI, SESSION_TYPE_LABELS, type SessionType, cn } from "@/lib/utils";
 import {
   CalendarDays,
@@ -18,15 +19,24 @@ import {
   FileText,
   Music,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  CreditCard,
+  Banknote,
 } from "lucide-react";
 
 const STEPS = [
   { icon: CalendarDays, label: "Date" },
   { icon: Clock, label: "Time" },
   { icon: ClipboardList, label: "Details" },
-  { icon: CheckCircle2, label: "Confirm" },
+  { icon: CheckCircle2, label: "Pay" },
 ];
+
+interface SessionTypeData {
+  id: string;
+  label: string;
+  icon: string;
+  price?: number;
+}
 
 export default function BookPage() {
   const router = useRouter();
@@ -50,6 +60,34 @@ export default function BookPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [showToast, setShowToast] = useState(false);
+
+  // Payment state
+  const [paymentData, setPaymentData] = useState<{
+    reference: string;
+    publicKey: string;
+    amount: number;
+    bookingId: string;
+    authorizationUrl: string;
+  } | null>(null);
+  const [paymentInitializing, setPaymentInitializing] = useState(false);
+
+  // Get session price
+  const getSessionPrice = (): number => {
+    if (!settings?.sessionTypes || !sessionType) return 0;
+    const matched = settings.sessionTypes.find((s: SessionTypeData) => s.label === sessionType);
+    return matched?.price || 0;
+  };
+
+  const sessionPrice = getSessionPrice();
+
+  // Format price in Naira
+  const formatPrice = (priceInNaira: number) => {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      minimumFractionDigits: 0,
+    }).format(priceInNaira);
+  };
 
   // Fetch monthly availability
   const fetchAvailability = useCallback(async () => {
@@ -112,19 +150,25 @@ export default function BookPage() {
     setStep(2);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Initialize payment via backend
+  async function handleInitializePayment(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedDate || !selectedSlotId || !clientName || !clientEmail || !clientPhone || !agreedToTerms) {
       setError("Please fill in all required fields and agree to terms.");
       return;
     }
 
-    setIsSubmitting(true);
+    if (sessionPrice <= 0) {
+      setError("No price configured for this session type. Please contact the studio.");
+      return;
+    }
+
+    setPaymentInitializing(true);
     setError(null);
 
     try {
       const dateStr = formatDateForAPI(selectedDate!);
-      const res = await fetch("/api/bookings", {
+      const res = await fetch("/api/payments/initialize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -141,22 +185,57 @@ export default function BookPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Failed to create booking");
+        setError(data.message || data.error || "Failed to initialize payment");
+        return;
+      }
+
+      // Store payment data for Paystack popup
+      setPaymentData({
+        reference: data.data.reference,
+        publicKey: data.data.publicKey,
+        amount: data.data.amount,
+        bookingId: data.data.bookingId,
+        authorizationUrl: data.data.authorizationUrl,
+      });
+
+      setStep(3);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setPaymentInitializing(false);
+    }
+  }
+
+  // After Paystack success — verify and redirect
+  async function handlePaymentSuccess(reference: string) {
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/payments/verify/${reference}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Payment verification failed. Please contact support.");
         return;
       }
 
       // Show success toast
       setShowToast(true);
-      
-      // Redirect after short delay
+
+      // Redirect to confirmation page
       setTimeout(() => {
-        router.push(`/book/confirmation?id=${data.data?.booking?.id || data.booking?.id}`);
+        router.push(`/book/confirmation?id=${paymentData?.bookingId}`);
       }, 2000);
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("Payment verification failed. Please contact support with your reference: " + reference);
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function handlePaymentClose() {
+    setError("Payment was not completed. Your booking is saved as pending — you can try paying again.");
   }
 
   const selectedSlot = slots.find((s) => s.id === selectedSlotId);
@@ -226,10 +305,10 @@ export default function BookPage() {
               </div>
             )}
 
-            {/* STEP 2: Details */}
+            {/* STEP 2: Details + Personal Info */}
             {step === 2 && (
-              <div className="animate-fade-in bg-card rounded-2xl border border-border shadow-card p-6 space-y-6">
-                <button onClick={() => setStep(1)} className="flex items-center gap-2 text-sm text-muted hover:text-accent transition-colors">
+              <form onSubmit={handleInitializePayment} className="animate-fade-in bg-card rounded-2xl border border-border shadow-card p-6 space-y-6">
+                <button type="button" onClick={() => setStep(1)} className="flex items-center gap-2 text-sm text-muted hover:text-accent transition-colors">
                   <ArrowLeft className="w-4 h-4" /> Back to Time Slots
                 </button>
                 <h3 className="text-lg font-semibold text-primary font-[family-name:var(--font-heading)]">Session Details</h3>
@@ -238,7 +317,7 @@ export default function BookPage() {
                   <div>
                     <label className="block text-sm font-medium text-text-secondary mb-1.5 text-black">What do you wish to do?</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {(settings?.sessionTypes || []).map((type: any) => (
+                      {(settings?.sessionTypes || []).map((type: SessionTypeData) => (
                         <button
                           key={type.id}
                           type="button"
@@ -249,7 +328,12 @@ export default function BookPage() {
                           )}
                         >
                           <span className="text-xl">{type.icon}</span>
-                          <span className="text-sm font-medium">{type.label}</span>
+                          <div className="flex-1">
+                            <span className="text-sm font-medium block">{type.label}</span>
+                            {type.price != null && type.price > 0 && (
+                              <span className="text-xs text-accent font-semibold">{formatPrice(type.price)}</span>
+                            )}
+                          </div>
                         </button>
                       ))}
                     </div>
@@ -267,24 +351,9 @@ export default function BookPage() {
                   </div>
                 </div>
 
-                <button
-                  disabled={!sessionType}
-                  onClick={() => setStep(3)}
-                  className="w-full py-3.5 rounded-xl text-white font-semibold gradient-accent disabled:opacity-50"
-                >
-                  Continue to Confirmation
-                </button>
-              </div>
-            )}
+                {/* Personal Information */}
+                <h3 className="text-lg font-semibold text-primary font-[family-name:var(--font-heading)] pt-2">Personal Information</h3>
 
-            {/* STEP 3: Confirm */}
-            {step === 3 && (
-              <form onSubmit={handleSubmit} className="animate-fade-in bg-card rounded-2xl border border-border shadow-card p-6 space-y-6">
-                <button type="button" onClick={() => setStep(2)} className="flex items-center gap-2 text-sm text-muted hover:text-accent transition-colors">
-                  <ArrowLeft className="w-4 h-4" /> Back to Details
-                </button>
-                <h3 className="text-lg font-semibold text-primary font-[family-name:var(--font-heading)]">Personal Information</h3>
-                
                 {error && (
                   <div className="p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" /> {error}
@@ -318,18 +387,81 @@ export default function BookPage() {
 
                   <div className="flex items-start gap-3 pt-2">
                     <input type="checkbox" checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="mt-1 w-4 h-4" />
-                    <label className="text-sm text-muted leading-relaxed">I agree to the studio's terms and conditions.</label>
+                    <label className="text-sm text-muted leading-relaxed">I agree to the studio&apos;s terms and conditions.</label>
                   </div>
                 </div>
 
+                {/* Price summary */}
+                {sessionPrice > 0 && (
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-accent/5 border border-accent/20">
+                    <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                      <Banknote className="w-4 h-4 text-accent" />
+                      Session Fee
+                    </div>
+                    <span className="text-lg font-bold text-accent">{formatPrice(sessionPrice)}</span>
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-3.5 rounded-xl text-white font-semibold gradient-accent shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
+                  disabled={!sessionType || !agreedToTerms || paymentInitializing}
+                  className="w-full py-3.5 rounded-xl text-white font-semibold gradient-accent shadow-md disabled:opacity-50 flex items-center justify-center gap-2 hover:shadow-lg transition-all"
                 >
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm Booking"}
+                  {paymentInitializing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Initializing Payment...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4" />
+                      {sessionPrice > 0 ? `Pay ${formatPrice(sessionPrice)} & Confirm` : "Proceed to Payment"}
+                    </>
+                  )}
                 </button>
               </form>
+            )}
+
+            {/* STEP 3: Payment */}
+            {step === 3 && paymentData && (
+              <div className="animate-fade-in bg-card rounded-2xl border border-border shadow-card p-6 space-y-6">
+                <button type="button" onClick={() => { setStep(2); setPaymentData(null); }} className="flex items-center gap-2 text-sm text-muted hover:text-accent transition-colors">
+                  <ArrowLeft className="w-4 h-4" /> Back to Details
+                </button>
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center mx-auto">
+                    <CreditCard className="w-8 h-8 text-accent" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-primary font-[family-name:var(--font-heading)]">Complete Payment</h3>
+                  <p className="text-sm text-muted">Click the button below to securely pay via Paystack.</p>
+
+                  <div className="p-4 rounded-xl bg-accent/5 border border-accent/20">
+                    <p className="text-xs text-muted uppercase tracking-wider mb-1">Amount to Pay</p>
+                    <p className="text-2xl font-bold text-accent">{formatPrice(paymentData.amount / 100)}</p>
+                  </div>
+
+                  {error && (
+                    <div className="p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" /> {error}
+                    </div>
+                  )}
+                </div>
+
+                <PaystackButton
+                  email={clientEmail}
+                  amount={paymentData.amount}
+                  reference={paymentData.reference}
+                  publicKey={paymentData.publicKey}
+                  label={isSubmitting ? "Verifying Payment..." : `Pay ${formatPrice(paymentData.amount / 100)}`}
+                  disabled={isSubmitting}
+                  onSuccess={handlePaymentSuccess}
+                  onClose={handlePaymentClose}
+                />
+
+                <p className="text-xs text-center text-muted">
+                  🔒 Secured by Paystack. Your payment details are encrypted.
+                </p>
+              </div>
             )}
           </div>
 
@@ -361,8 +493,17 @@ export default function BookPage() {
                     </div>
                   </div>
                 )}
+                {sessionPrice > 0 && (
+                  <div className="flex items-start gap-3">
+                    <Banknote className="w-5 h-5 text-accent" />
+                    <div>
+                      <p className="text-xs text-muted font-medium uppercase tracking-wider">Price</p>
+                      <p className="text-sm font-bold text-accent mt-0.5">{formatPrice(sessionPrice)}</p>
+                    </div>
+                  </div>
+                )}
                 <div className="border-t border-border pt-4">
-                  <p className="text-xs text-muted italic">Instant confirmation & email receipt</p>
+                  <p className="text-xs text-muted italic">Secure payment via Paystack • Email confirmation after payment</p>
                 </div>
               </div>
             </div>
@@ -378,7 +519,7 @@ export default function BookPage() {
               <CheckCircle2 className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="font-bold">Booking Confirmed Successfully!</p>
+              <p className="font-bold">Payment Successful!</p>
               <p className="text-xs text-white/80">Redirecting to confirmation details...</p>
             </div>
           </div>

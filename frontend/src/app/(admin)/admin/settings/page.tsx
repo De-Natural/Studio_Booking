@@ -9,6 +9,7 @@ interface SessionType {
   id: string;
   label: string;
   icon: string;
+  price: number;
 }
 
 interface TimeSlot {
@@ -90,6 +91,7 @@ export default function SettingsPage() {
       id: `SESS_${Date.now()}`,
       label: "New Session Type",
       icon: "✨",
+      price: 0,
     };
     setSettings({
       ...settings,
@@ -110,7 +112,7 @@ export default function SettingsPage() {
     setSettings({
       ...settings,
       sessionTypes: settings.sessionTypes.map(s => 
-        s.id === id ? { ...s, [field]: value } : s
+        s.id === id ? { ...s, [field]: field === 'price' ? Number(value) : value } : s
       ),
     });
   };
@@ -230,9 +232,9 @@ export default function SettingsPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           {settings.sessionTypes.map((type) => (
-            <div key={type.id} className="group flex items-center gap-3 p-4 rounded-xl border border-border bg-surface-alt hover:border-accent/30 transition-all">
+            <div key={type.id} className="group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-xl border border-border bg-surface-alt hover:border-accent/30 transition-all">
               <input
                 type="text"
                 value={type.icon}
@@ -245,9 +247,21 @@ export default function SettingsPage() {
                 onChange={(e) => updateSessionType(type.id, 'label', e.target.value)}
                 className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-white text-primary focus:outline-none focus:ring-2 focus:ring-accent/30"
               />
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-bold text-muted">₦</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={type.price || 0}
+                  onChange={(e) => updateSessionType(type.id, 'price', e.target.value)}
+                  placeholder="Price"
+                  className="w-28 px-3 py-1.5 rounded-lg border border-border bg-white text-primary focus:outline-none focus:ring-2 focus:ring-accent/30 text-sm"
+                />
+              </div>
               <button
                 onClick={() => removeSessionType(type.id)}
-                className="text-booked opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                className="text-booked opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
