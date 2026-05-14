@@ -19,9 +19,7 @@ interface Booking {
   createdAt: string;
 }
 
-import { Suspense } from "react";
-
-function BookingsList() {
+export default function BookingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -229,17 +227,5 @@ function BookingsList() {
         )}
       </div>
     </div>
-  );
-}
-
-export default function BookingsPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 text-accent animate-spin" />
-      </div>
-    }>
-      <BookingsList />
-    </Suspense>
   );
 }
