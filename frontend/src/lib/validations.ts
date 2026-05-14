@@ -14,10 +14,10 @@ export const bookingSchema = z.object({
     .max(20, "Phone number must be under 20 characters")
     .regex(/^[+\d\s()-]+$/, "Please enter a valid phone number"),
   sessionType: z.enum([
-    "MUSIC_RECORDING",
+    "AUDIO",
     "PODCAST",
     "PHOTOGRAPHY",
-    "VIDEO_SHOOT",
+    "VIDEO",
     "OTHER",
   ]),
   bookingDate: z.string().refine((val) => {
@@ -25,7 +25,7 @@ export const bookingSchema = z.object({
     return !isNaN(date.getTime()) && date >= new Date(new Date().toDateString());
   }, "Please select a valid future date"),
   timeSlotId: z
-    .string({ required_error: "Please select a time slot" })
+    .string()
     .min(1, "Please select a time slot"),
   notes: z
     .string()

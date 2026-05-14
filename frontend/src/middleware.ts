@@ -14,7 +14,7 @@ export function middleware(request: NextRequest) {
 
   // Only rate limit booking and auth routes
   if (pathname.startsWith("/api/bookings") || pathname.startsWith("/api/auth")) {
-    const ip = request.ip || "unknown";
+    const ip = request.headers.get("x-forwarded-for") || "unknown";
     const now = Date.now();
     const rateData = rateLimitMap.get(ip) || { count: 0, lastReset: now };
 
