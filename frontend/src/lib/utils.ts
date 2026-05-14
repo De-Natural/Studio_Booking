@@ -1,18 +1,18 @@
-// Session type as a plain string union (no longer from Prisma)
-export type SessionType = "AUDIO" | "VIDEO" | "PHOTOGRAPHY" | "OTHER";
+export type SessionType = "AUDIO" | "PODCAST" | "PHOTOGRAPHY" | "VIDEO" | "OTHER";
 
 export const SESSION_TYPE_LABELS: Record<SessionType, string> = {
-  AUDIO: "Audio Recording / Podcast",
-  VIDEO: "Video Shoot / Podcast",
+  AUDIO: "Music Recording",
+  PODCAST: "Podcast",
   PHOTOGRAPHY: "Photography",
+  VIDEO: "Video Shoot",
   OTHER: "Other",
 };
 
 export const SESSION_TYPE_ICONS: Record<SessionType, string> = {
-  MUSIC_RECORDING: "🎵",
+  AUDIO: "🎵",
   PODCAST: "🎙️",
   PHOTOGRAPHY: "📸",
-  VIDEO_SHOOT: "🎬",
+  VIDEO: "🎬",
   OTHER: "✨",
 };
 
