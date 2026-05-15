@@ -3,17 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev frontend",
     "server": "npx nodemon server/server.js",
-    "build": "next build frontend",
-    "start": "next start frontend",
-    "lint": "eslint frontend/src"
+    "dev:server": "npx nodemon server/server.js",
+    "lint": "eslint server"
   },
   "dependencies": {
     "@getbrevo/brevo": "^5.0.4",
     "@paystack/paystack-sdk": "^1.0.1",
-    "@react-email/components": "^1.0.12",
-    "@react-email/render": "^2.0.7",
     "autoprefixer": "^10.5.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
@@ -22,26 +18,17 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "lucide-react": "^1.8.0",
     "mongoose": "^8.1.1",
     "morgan": "^1.10.0",
-    "next": "^15.3.3",
     "nodemailer": "^8.0.7",
     "postcss": "^8.5.10",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "resend": "^6.12.2",
     "tailwindcss": "^3.4.17",
-    "winston": "^3.11.0",
-    "zod": "^4.3.6"
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "@types/node": "25.6.0",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
     "nodemon": "^3.0.3"
   }
 }
